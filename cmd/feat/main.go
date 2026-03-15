@@ -9,6 +9,7 @@ import (
 	"github.com/lola-the-lobster/feat/internal/loader"
 	"github.com/lola-the-lobster/feat/internal/manifest"
 	"github.com/lola-the-lobster/feat/internal/split"
+	"github.com/lola-the-lobster/feat/internal/state"
 	"github.com/lola-the-lobster/feat/internal/tree"
 )
 
@@ -19,6 +20,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "  list     Show feature tree")
 		fmt.Fprintln(os.Stderr, "  parse    Parse .feat.yml and dump structure")
 		fmt.Fprintln(os.Stderr, "  split    Create a new feature")
+		fmt.Fprintln(os.Stderr, "  status   Show current feature context")
 		fmt.Fprintln(os.Stderr, "  work     Load a feature's context")
 		os.Exit(1)
 	}
@@ -38,6 +40,11 @@ func main() {
 		}
 	case "split":
 		if err := runSplit(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+	case "status":
+		if err := runStatus(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -130,6 +137,35 @@ func runSplit() error {
 	return nil
 }
 
+func runStatus() error {
+	var manifestPath string
+	flag.StringVar(&manifestPath, "f", ".feat.yml", "Path to manifest file")
+	flag.CommandLine.Parse(os.Args[2:])
+
+	// Resolve absolute path
+	absPath, err := filepath.Abs(manifestPath)
+	if err != nil {
+		return fmt.Errorf("resolving path: %w", err)
+	}
+
+	// Check if file exists
+	if _, err := os.Stat(absPath); os.IsNotExist(err) {
+		return fmt.Errorf("manifest not found: %s", absPath)
+	}
+
+	projectRoot := filepath.Dir(absPath)
+	mgr := state.NewManager(projectRoot)
+
+	s, err := mgr.GetCurrent()
+	if err != nil {
+		return fmt.Errorf("reading state: %w", err)
+	}
+
+	fmt.Print(state.FormatState(s))
+
+	return nil
+}
+
 func runWork() error {
 	if len(os.Args) < 3 {
 		return fmt.Errorf("usage: feat work <feature-path>")
@@ -161,6 +197,13 @@ func runWork() error {
 	result, err := l.Load(featurePath)
 	if err != nil {
 		return err
+	}
+
+	// Save state
+	projectRoot := filepath.Dir(absPath)
+	mgr := state.NewManager(projectRoot)
+	if err := mgr.SetCurrent(featurePath, absPath); err != nil {
+		return fmt.Errorf("saving state: %w", err)
 	}
 
 	fmt.Print(loader.FormatResult(result))
