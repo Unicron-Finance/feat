@@ -1,6 +1,7 @@
 package loader
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,8 +12,9 @@ import (
 func TestLoad(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create manifest with Tree structure
+	// Create manifest with Tree structure and higher max_files
 	m := &manifest.Manifest{
+		Config: manifest.Config{MaxFiles: 5},
 		Tree: manifest.Tree{
 			Name: "test-project",
 			Children: map[string]manifest.Node{
@@ -164,5 +166,150 @@ func TestLoadNotFound(t *testing.T) {
 	_, err := l.Load("nonexistent")
 	if err == nil {
 		t.Error("Expected error for non-existent feature")
+	}
+}
+
+func TestLoadMaxFilesExceeded(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create manifest with max_files = 2
+	m := &manifest.Manifest{
+		Config: manifest.Config{MaxFiles: 2},
+		Tree: manifest.Tree{
+			Name: "test",
+			Children: map[string]manifest.Node{
+				"auth": {
+					Files: []string{"auth/interface.go", "auth/types.go"}, // 2 ancestor files
+					Children: map[string]manifest.Node{
+						"login": {
+							Files: []string{"auth/login/handler.go"}, // 1 file = 3 total
+						},
+					},
+				},
+			},
+		},
+	}
+
+	manifestPath := filepath.Join(tmpDir, "feat.yaml")
+	if err := m.Save(manifestPath); err != nil {
+		t.Fatalf("Failed to save manifest: %v", err)
+	}
+
+	l := New(m, manifestPath)
+	_, err := l.Load("auth/login")
+	if err == nil {
+		t.Error("Expected error when max_files exceeded")
+	}
+
+	var limitErr *ContextLimitExceededError
+	if !errors.As(err, &limitErr) {
+		t.Errorf("Expected ContextLimitExceededError, got %T: %v", err, err)
+	} else {
+		if limitErr.Total != 3 {
+			t.Errorf("Expected Total = 3, got %d", limitErr.Total)
+		}
+		if limitErr.MaxFiles != 2 {
+			t.Errorf("Expected MaxFiles = 2, got %d", limitErr.MaxFiles)
+		}
+	}
+}
+
+func TestLoadMaxFilesWithinLimit(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create manifest with max_files = 3
+	m := &manifest.Manifest{
+		Config: manifest.Config{MaxFiles: 3},
+		Tree: manifest.Tree{
+			Name: "test",
+			Children: map[string]manifest.Node{
+				"auth": {
+					Files: []string{"auth/interface.go"}, // 1 ancestor file
+					Children: map[string]manifest.Node{
+						"login": {
+							Files: []string{"auth/login/handler.go"}, // 1 file = 2 total
+						},
+					},
+				},
+			},
+		},
+	}
+
+	manifestPath := filepath.Join(tmpDir, "feat.yaml")
+	if err := m.Save(manifestPath); err != nil {
+		t.Fatalf("Failed to save manifest: %v", err)
+	}
+
+	// Create the file
+	authDir := filepath.Join(tmpDir, "auth")
+	if err := os.MkdirAll(authDir, 0755); err != nil {
+		t.Fatalf("Failed to create directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(authDir, "interface.go"), []byte("package"), 0644); err != nil {
+		t.Fatalf("Failed to create file: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(authDir, "login"), 0755); err != nil {
+		t.Fatalf("Failed to create directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(authDir, "login", "handler.go"), []byte("package"), 0644); err != nil {
+		t.Fatalf("Failed to create file: %v", err)
+	}
+
+	l := New(m, manifestPath)
+	result, err := l.Load("auth/login")
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	// Should succeed - 2 files total (1 + 1) <= 3 max_files
+	if len(result.Files) != 1 {
+		t.Errorf("Expected 1 file, got %d", len(result.Files))
+	}
+	if len(result.AncestorFiles) != 1 {
+		t.Errorf("Expected 1 ancestor file, got %d", len(result.AncestorFiles))
+	}
+}
+
+func TestLoadMaxFilesDefault(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create manifest without config (uses default = 3)
+	m := &manifest.Manifest{
+		Tree: manifest.Tree{
+			Name: "test",
+			Children: map[string]manifest.Node{
+				"auth": {
+					Files: []string{"auth/interface.go", "auth/types.go", "auth/config.go"}, // 3 ancestor files
+					Children: map[string]manifest.Node{
+						"login": {
+							Files: []string{"auth/login/handler.go"}, // 1 file = 4 total
+						},
+					},
+				},
+			},
+		},
+	}
+
+	manifestPath := filepath.Join(tmpDir, "feat.yaml")
+	if err := m.Save(manifestPath); err != nil {
+		t.Fatalf("Failed to save manifest: %v", err)
+	}
+
+	l := New(m, manifestPath)
+	_, err := l.Load("auth/login")
+	if err == nil {
+		t.Error("Expected error when default max_files (3) exceeded")
+	}
+
+	var limitErr *ContextLimitExceededError
+	if !errors.As(err, &limitErr) {
+		t.Errorf("Expected ContextLimitExceededError, got %T: %v", err, err)
+	} else {
+		if limitErr.Total != 4 {
+			t.Errorf("Expected Total = 4, got %d", limitErr.Total)
+		}
+		if limitErr.MaxFiles != 3 {
+			t.Errorf("Expected MaxFiles = 3 (default), got %d", limitErr.MaxFiles)
+		}
 	}
 }
