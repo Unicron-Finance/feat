@@ -16,7 +16,7 @@ tree:
   name: my-project
   files:
     - root.go
-  features:
+  children:
     auth:
       files:
         - auth/interface.go
@@ -47,13 +47,13 @@ tree:
 		t.Errorf("Expected root files ['root.go'], got %v", m.Tree.Files)
 	}
 
-	if len(m.Tree.Features) != 1 {
-		t.Errorf("Expected 1 root feature, got %d", len(m.Tree.Features))
+	if len(m.Tree.Children) != 1 {
+		t.Errorf("Expected 1 root child, got %d", len(m.Tree.Children))
 	}
 
-	auth, ok := m.Tree.Features["auth"]
+	auth, ok := m.Tree.Children["auth"]
 	if !ok {
-		t.Fatal("Expected 'auth' feature")
+		t.Fatal("Expected 'auth' node")
 	}
 
 	if len(auth.Files) != 1 || auth.Files[0] != "auth/interface.go" {
@@ -83,11 +83,11 @@ func TestSave(t *testing.T) {
 	m := &Manifest{
 		Tree: Tree{
 			Name: "test-project",
-			Features: map[string]Feature{
+			Children: map[string]Node{
 				"auth": {
 					Files: []string{"auth/interface.go"},
 					Tests: []string{"auth/interface_test.go"},
-					Children: map[string]Feature{
+					Children: map[string]Node{
 						"login": {
 							Files: []string{"auth/login/handler.go"},
 							Tests: []string{"auth/login/handler_test.go"},
@@ -117,24 +117,24 @@ func TestSave(t *testing.T) {
 		t.Errorf("Expected name 'test-project', got %q", m2.Tree.Name)
 	}
 
-	if len(m2.Tree.Features) != 1 {
-		t.Errorf("Expected 1 feature after reload, got %d", len(m2.Tree.Features))
+	if len(m2.Tree.Children) != 1 {
+		t.Errorf("Expected 1 child after reload, got %d", len(m2.Tree.Children))
 	}
 
-	auth := m2.Tree.Features["auth"]
+	auth := m2.Tree.Children["auth"]
 	if len(auth.Tests) != 1 {
 		t.Errorf("Expected 1 test after reload, got %d", len(auth.Tests))
 	}
 }
 
-func TestGetFeature(t *testing.T) {
+func TestGetNode(t *testing.T) {
 	m := &Manifest{
 		Tree: Tree{
 			Name: "test",
-			Features: map[string]Feature{
+			Children: map[string]Node{
 				"auth": {
 					Files: []string{"auth/interface.go"},
-					Children: map[string]Feature{
+					Children: map[string]Node{
 						"login": {
 							Files: []string{"auth/login/handler.go"},
 						},
@@ -147,98 +147,98 @@ func TestGetFeature(t *testing.T) {
 	tests := []struct {
 		path            string
 		expectError     bool
-		expectLeaf      bool
+		expectFeature   bool
 		expectAncestors int
 	}{
 		{"auth/login", false, true, 1}, // 1 ancestor file: auth/interface.go
-		{"auth", false, false, 0},      // 0 ancestors (root level, not leaf)
+		{"auth", false, false, 0},      // 0 ancestors (root level, boundary)
 		{"nonexistent", true, false, 0},
 		{"auth/nonexistent", true, false, 0},
 		{"", true, false, 0},
 	}
 
 	for _, tt := range tests {
-		f, ancestors, err := m.GetFeature(tt.path)
+		n, ancestors, err := m.GetNode(tt.path)
 		if tt.expectError {
 			if err == nil {
-				t.Errorf("GetFeature(%q): expected error, got nil", tt.path)
+				t.Errorf("GetNode(%q): expected error, got nil", tt.path)
 			}
 			continue
 		}
 		if err != nil {
-			t.Errorf("GetFeature(%q): unexpected error: %v", tt.path, err)
+			t.Errorf("GetNode(%q): unexpected error: %v", tt.path, err)
 			continue
 		}
-		if f == nil {
-			t.Errorf("GetFeature(%q): expected feature, got nil", tt.path)
+		if n == nil {
+			t.Errorf("GetNode(%q): expected node, got nil", tt.path)
 			continue
 		}
-		if f.IsLeaf() != tt.expectLeaf {
-			t.Errorf("GetFeature(%q): IsLeaf() = %v, want %v", tt.path, f.IsLeaf(), tt.expectLeaf)
+		if n.IsFeature() != tt.expectFeature {
+			t.Errorf("GetNode(%q): IsFeature() = %v, want %v", tt.path, n.IsFeature(), tt.expectFeature)
 		}
 		if len(ancestors) != tt.expectAncestors {
-			t.Errorf("GetFeature(%q): len(ancestors) = %d, want %d", tt.path, len(ancestors), tt.expectAncestors)
+			t.Errorf("GetNode(%q): len(ancestors) = %d, want %d", tt.path, len(ancestors), tt.expectAncestors)
 		}
 	}
 }
 
-func TestFeatureIsLeaf(t *testing.T) {
+func TestNodeIsFeature(t *testing.T) {
 	tests := []struct {
-		f    Feature
+		n    Node
 		want bool
 	}{
-		{Feature{Files: []string{"a.go"}}, true},
-		{Feature{Tests: []string{"a_test.go"}}, true},
-		{Feature{Files: []string{"a.go"}, Tests: []string{"a_test.go"}}, true},
-		{Feature{Files: []string{}}, false},
-		{Feature{Children: map[string]Feature{}}, false},
-		{Feature{Files: []string{"a.go"}, Children: map[string]Feature{"child": {}}}, false},
+		{Node{Files: []string{"a.go"}}, true},
+		{Node{Tests: []string{"a_test.go"}}, true},
+		{Node{Files: []string{"a.go"}, Tests: []string{"a_test.go"}}, true},
+		{Node{Files: []string{}}, false}, // empty
+		{Node{Children: map[string]Node{}}, false},
+		{Node{Files: []string{"a.go"}, Children: map[string]Node{"child": {}}}, false},
 	}
 
 	for _, tt := range tests {
-		got := tt.f.IsLeaf()
+		got := tt.n.IsFeature()
 		if got != tt.want {
-			t.Errorf("IsLeaf() = %v, want %v for %+v", got, tt.want, tt.f)
+			t.Errorf("IsFeature() = %v, want %v for %+v", got, tt.want, tt.n)
 		}
 	}
 }
 
-func TestFeatureIsIntermediate(t *testing.T) {
+func TestNodeIsBoundary(t *testing.T) {
 	tests := []struct {
-		f    Feature
+		n    Node
 		want bool
 	}{
-		// Has children → intermediate
-		{Feature{Children: map[string]Feature{"child": {}}}, true},
-		// Has files and children → intermediate
-		{Feature{Files: []string{"a.go"}, Children: map[string]Feature{"child": {}}}, true},
-		// Has files only → leaf
-		{Feature{Files: []string{"a.go"}}, false},
-		// Has tests only → leaf
-		{Feature{Tests: []string{"a_test.go"}}, false},
-		// Has both files and tests → leaf
-		{Feature{Files: []string{"a.go"}, Tests: []string{"a_test.go"}}, false},
-		// Empty subsystem → intermediate (boundary placeholder)
-		{Feature{}, true},
-		// Empty children map → intermediate
-		{Feature{Children: map[string]Feature{}}, true},
+		// Has children → boundary
+		{Node{Children: map[string]Node{"child": {}}}, true},
+		// Has files and children → boundary
+		{Node{Files: []string{"a.go"}, Children: map[string]Node{"child": {}}}, true},
+		// Has files only → feature
+		{Node{Files: []string{"a.go"}}, false},
+		// Has tests only → feature
+		{Node{Tests: []string{"a_test.go"}}, false},
+		// Has both files and tests → feature
+		{Node{Files: []string{"a.go"}, Tests: []string{"a_test.go"}}, false},
+		// Empty boundary → boundary (placeholder)
+		{Node{}, true},
+		// Empty children map → boundary
+		{Node{Children: map[string]Node{}}, true},
 	}
 
 	for _, tt := range tests {
-		got := tt.f.IsIntermediate()
+		got := tt.n.IsBoundary()
 		if got != tt.want {
-			t.Errorf("IsIntermediate() = %v, want %v for %+v", got, tt.want, tt.f)
+			t.Errorf("IsBoundary() = %v, want %v for %+v", got, tt.want, tt.n)
 		}
 	}
 }
 
-func TestFeatureAllFiles(t *testing.T) {
-	f := Feature{
+func TestNodeAllFiles(t *testing.T) {
+	n := Node{
 		Files: []string{"a.go", "b.go"},
 		Tests: []string{"a_test.go"},
 	}
 
-	all := f.AllFiles()
+	all := n.AllFiles()
 	if len(all) != 3 {
 		t.Errorf("Expected 3 files, got %d: %v", len(all), all)
 	}
@@ -252,28 +252,28 @@ func TestValidate(t *testing.T) {
 	}{
 		{
 			name:   "empty manifest",
-			m:      Manifest{Tree: Tree{Name: "", Features: map[string]Feature{}}},
-			issues: 2, // no name, no features
+			m:      Manifest{Tree: Tree{Name: "", Children: map[string]Node{}}},
+			issues: 2, // no name, no children
 		},
 		{
 			name: "missing name",
 			m: Manifest{
 				Tree: Tree{
 					Name:     "",
-					Features: map[string]Feature{"auth": {Files: []string{"auth.go"}}},
+					Children: map[string]Node{"auth": {Files: []string{"auth.go"}}},
 				},
 			},
 			issues: 1,
 		},
 		{
-			name: "valid feature tree",
+			name: "valid tree",
 			m: Manifest{
 				Tree: Tree{
 					Name: "my-project",
-					Features: map[string]Feature{
+					Children: map[string]Node{
 						"auth": {
 							Files: []string{"auth/interface.go"},
-							Children: map[string]Feature{
+							Children: map[string]Node{
 								"login": {Files: []string{"auth/login.go"}}},
 						},
 					},
@@ -282,21 +282,21 @@ func TestValidate(t *testing.T) {
 			issues: 0,
 		},
 		{
-			name: "valid leaf with tests",
+			name: "valid feature with tests",
 			m: Manifest{
 				Tree: Tree{
 					Name:     "my-project",
-					Features: map[string]Feature{"auth": {Files: []string{"auth.go"}, Tests: []string{"auth_test.go"}}},
+					Children: map[string]Node{"auth": {Files: []string{"auth.go"}, Tests: []string{"auth_test.go"}}},
 				},
 			},
 			issues: 0,
 		},
 		{
-			name: "valid empty subsystem",
+			name: "valid empty boundary",
 			m: Manifest{
 				Tree: Tree{
 					Name:     "my-project",
-					Features: map[string]Feature{"payments": {}},
+					Children: map[string]Node{"payments": {}},
 				},
 			},
 			issues: 0,

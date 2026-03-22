@@ -22,59 +22,60 @@ type Tree struct {
 	// Files are files at the root level (e.g., go.mod, README.md).
 	Files []string `yaml:"files,omitempty"`
 
-	// Features are the top-level features.
-	Features map[string]Feature `yaml:"features,omitempty"`
+	// Children are the top-level nodes (boundaries or features).
+	Children map[string]Node `yaml:"children,omitempty"`
 }
 
-// Feature represents either an intermediate node (subsystem) or a leaf (actual feature).
-type Feature struct {
-	// Files are the implementation files for this feature.
-	// Both intermediate nodes and leaves can have files.
+// Node is the interface for all nodes in the tree.
+// A Node is either a Boundary (intermediate, has children) or a Feature (leaf).
+type Node struct {
+	// Files are the implementation files for this node.
+	// Both boundaries and features can have files.
 	Files []string `yaml:"files,omitempty"`
 
-	// Tests are the test files for this feature.
-	// Kept separate from Files to distinguish implementation from tests.
+	// Tests are the test files for this node.
+	// Only features have tests (boundaries don't have direct tests).
 	Tests []string `yaml:"tests,omitempty"`
 
-	// Children are nested features (subsystems).
-	// If Children is non-nil, this is an intermediate node.
-	// If Children is nil, this is a leaf (if it has content) or placeholder (if empty).
-	Children map[string]Feature `yaml:",inline"`
+	// Children are nested nodes.
+	// If Children is non-nil, this node is a Boundary (intermediate).
+	// If Children is nil, this node is a Feature (leaf).
+	Children map[string]Node `yaml:",inline"`
 }
 
-// IsLeaf returns true if this feature is a leaf node.
-// A leaf has content (files/tests) and no children.
-// Note: An empty feature (no files, no tests, no children) is a placeholder, not a leaf.
-func (f Feature) IsLeaf() bool {
-	if f.Children != nil {
-		return false // Has children → intermediate
+// IsFeature returns true if this node is a Feature (leaf).
+// A feature has content (files/tests) and no children.
+// Note: An empty node (no files, no tests, no children) is a placeholder boundary.
+func (n Node) IsFeature() bool {
+	if n.Children != nil {
+		return false // Has children → boundary
 	}
 	// No children - check if it has content
-	hasContent := len(f.Files) > 0 || len(f.Tests) > 0
+	hasContent := len(n.Files) > 0 || len(n.Tests) > 0
 	return hasContent
 }
 
-// IsIntermediate returns true if this feature is an intermediate node.
-// Intermediate nodes either:
+// IsBoundary returns true if this node is a Boundary (intermediate).
+// Boundaries either:
 //   - Have explicit children (non-nil Children map)
 //   - Are empty placeholders (no files, no tests, no children defined yet)
-func (f Feature) IsIntermediate() bool {
-	if f.Children != nil {
+func (n Node) IsBoundary() bool {
+	if n.Children != nil {
 		return true // Has explicit children
 	}
 	// No children - check if it's an empty placeholder
-	hasContent := len(f.Files) > 0 || len(f.Tests) > 0
-	return !hasContent // Empty = placeholder = intermediate
+	hasContent := len(n.Files) > 0 || len(n.Tests) > 0
+	return !hasContent // Empty = placeholder = boundary
 }
 
-// HasContent returns true if this feature has any files or tests.
-func (f Feature) HasContent() bool {
-	return len(f.Files) > 0 || len(f.Tests) > 0
+// HasContent returns true if this node has any files or tests.
+func (n Node) HasContent() bool {
+	return len(n.Files) > 0 || len(n.Tests) > 0
 }
 
 // AllFiles returns both implementation and test files.
-func (f Feature) AllFiles() []string {
-	return append(f.Files, f.Tests...)
+func (n Node) AllFiles() []string {
+	return append(n.Files, n.Tests...)
 }
 
 // Load reads a manifest from the given path.
@@ -113,51 +114,64 @@ func (m *Manifest) Save(path string) error {
 	return nil
 }
 
-// GetFeature retrieves a feature by its path (e.g., "auth/password-reset").
+// GetNode retrieves a node by its path (e.g., "auth/password-reset").
 // Returns nil if not found.
-func (m *Manifest) GetFeature(path string) (*Feature, []string, error) {
+func (m *Manifest) GetNode(path string) (*Node, []string, error) {
 	if path == "" {
-		return nil, nil, fmt.Errorf("empty feature path")
+		return nil, nil, fmt.Errorf("empty path")
 	}
 
 	parts := splitPath(path)
 	if len(parts) == 0 {
-		return nil, nil, fmt.Errorf("invalid feature path: %s", path)
+		return nil, nil, fmt.Errorf("invalid path: %s", path)
 	}
 
 	// Collect ancestor implementation files as we traverse
 	// Note: ancestor test files are NOT included (tests are feature-specific)
 	var ancestors []string
 
-	current := m.Tree.Features
-	var feature *Feature
+	current := m.Tree.Children
+	var node *Node
 
 	for i, part := range parts {
-		f, ok := current[part]
+		n, ok := current[part]
 		if !ok {
-			return nil, nil, fmt.Errorf("feature not found: %s", path)
+			return nil, nil, fmt.Errorf("node not found: %s", path)
 		}
 
-		// If this is the last part, we've found our feature
+		// If this is the last part, we've found our node
 		if i == len(parts)-1 {
-			feature = &f
+			node = &n
 			break
 		}
 
 		// Otherwise, this is a parent node - collect its implementation files (not tests)
-		ancestors = append(ancestors, f.Files...)
+		ancestors = append(ancestors, n.Files...)
 
 		// Descend into children
-		if f.Children == nil {
+		if n.Children == nil {
 			return nil, nil, fmt.Errorf("path continues but %s has no children", part)
 		}
-		current = f.Children
+		current = n.Children
 	}
 
-	return feature, ancestors, nil
+	return node, ancestors, nil
 }
 
-// splitPath splits a feature path like "auth/password-reset" into parts.
+// GetFeature is an alias for GetNode for backward compatibility.
+// It returns an error if the node is a boundary (not a feature).
+func (m *Manifest) GetFeature(path string) (*Node, []string, error) {
+	node, ancestors, err := m.GetNode(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	if node != nil && node.IsBoundary() {
+		return nil, nil, fmt.Errorf("%s is a boundary, not a feature", path)
+	}
+	return node, ancestors, nil
+}
+
+// splitPath splits a path like "auth/password-reset" into parts.
 func splitPath(path string) []string {
 	var parts []string
 	var current string
@@ -185,27 +199,27 @@ func (m *Manifest) Validate() []string {
 		issues = append(issues, "manifest tree has no name")
 	}
 
-	if len(m.Tree.Features) == 0 {
-		issues = append(issues, "manifest has no features defined")
+	if len(m.Tree.Children) == 0 {
+		issues = append(issues, "manifest has no children defined")
 	}
 
-	for name, f := range m.Tree.Features {
-		issues = append(issues, validateFeature(name, f)...)
+	for name, n := range m.Tree.Children {
+		issues = append(issues, validateNode(name, n)...)
 	}
 
 	return issues
 }
 
-func validateFeature(name string, f Feature) []string {
+func validateNode(name string, n Node) []string {
 	var issues []string
 
-	// Note: Intermediate nodes CAN have files/tests. They're not just boundaries.
+	// Note: Boundaries CAN have files. They're not just containers.
 	// An auth subsystem might have auth/interface.go AND auth/login/ children.
 
 	// Validate children recursively
-	if f.Children != nil {
-		for childName, child := range f.Children {
-			issues = append(issues, validateFeature(name+"/"+childName, child)...)
+	if n.Children != nil {
+		for childName, child := range n.Children {
+			issues = append(issues, validateNode(name+"/"+childName, child)...)
 		}
 	}
 
@@ -217,7 +231,7 @@ func Init(path string, projectName string) error {
 	m := &Manifest{
 		Tree: Tree{
 			Name:     projectName,
-			Features: make(map[string]Feature),
+			Children: make(map[string]Node),
 		},
 	}
 	return m.Save(path)

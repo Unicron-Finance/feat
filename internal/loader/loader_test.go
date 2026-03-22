@@ -15,11 +15,11 @@ func TestLoad(t *testing.T) {
 	m := &manifest.Manifest{
 		Tree: manifest.Tree{
 			Name: "test-project",
-			Features: map[string]manifest.Feature{
+			Children: map[string]manifest.Node{
 				"auth": {
 					Files: []string{"auth/interface.go", "auth/types.go"},
 					Tests: []string{"auth/interface_test.go"},
-					Children: map[string]manifest.Feature{
+					Children: map[string]manifest.Node{
 						"login": {
 							Files: []string{"auth/login/handler.go", "auth/login/types.go"},
 							Tests: []string{"auth/login/handler_test.go"},
@@ -91,7 +91,7 @@ func TestLoadMissingFiles(t *testing.T) {
 	m := &manifest.Manifest{
 		Tree: manifest.Tree{
 			Name: "test",
-			Features: map[string]manifest.Feature{
+			Children: map[string]manifest.Node{
 				"auth": {
 					Files: []string{"auth/missing.go"},
 					Tests: []string{"auth/missing_test.go"},
@@ -122,10 +122,10 @@ func TestLoadNotLeaf(t *testing.T) {
 	m := &manifest.Manifest{
 		Tree: manifest.Tree{
 			Name: "test",
-			Features: map[string]manifest.Feature{
+			Children: map[string]manifest.Node{
 				"auth": {
 					Files: []string{"auth/interface.go"},
-					Children: map[string]manifest.Feature{
+					Children: map[string]manifest.Node{
 						"login": {Files: []string{"auth/login.go"}},
 					},
 				},
@@ -141,7 +141,7 @@ func TestLoadNotLeaf(t *testing.T) {
 	l := New(m, manifestPath)
 	_, err := l.Load("auth")
 	if err == nil {
-		t.Error("Expected error for non-leaf feature")
+		t.Error("Expected error for boundary (non-feature)")
 	}
 }
 
@@ -151,7 +151,7 @@ func TestLoadNotFound(t *testing.T) {
 	m := &manifest.Manifest{
 		Tree: manifest.Tree{
 			Name:     "test",
-			Features: map[string]manifest.Feature{},
+			Children: map[string]manifest.Node{},
 		},
 	}
 

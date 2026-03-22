@@ -11,11 +11,11 @@ func TestPrint(t *testing.T) {
 	m := &manifest.Manifest{
 		Tree: manifest.Tree{
 			Name: "my-project",
-			Features: map[string]manifest.Feature{
+			Children: map[string]manifest.Node{
 				"auth": {
 					Files: []string{"auth/interface.go"},
 					Tests: []string{"auth/interface_test.go"},
-					Children: map[string]manifest.Feature{
+					Children: map[string]manifest.Node{
 						"login": {
 							Files: []string{"auth/login.go"},
 							Tests: []string{"auth/login_test.go"},
@@ -36,7 +36,7 @@ func TestPrint(t *testing.T) {
 	printer := NewPrinter()
 	output := printer.Print(m)
 
-	// Check that output contains expected features
+	// Check that output contains expected nodes
 	if !strings.Contains(output, "auth/") {
 		t.Error("Expected output to contain 'auth/'")
 	}
@@ -64,7 +64,7 @@ func TestPrintEmpty(t *testing.T) {
 	m := &manifest.Manifest{
 		Tree: manifest.Tree{
 			Name:     "my-project",
-			Features: map[string]manifest.Feature{},
+			Children: map[string]manifest.Node{},
 		},
 	}
 
@@ -80,10 +80,10 @@ func TestListPaths(t *testing.T) {
 	m := &manifest.Manifest{
 		Tree: manifest.Tree{
 			Name: "my-project",
-			Features: map[string]manifest.Feature{
+			Children: map[string]manifest.Node{
 				"auth": {
 					Files: []string{"auth/interface.go"},
-					Children: map[string]manifest.Feature{
+					Children: map[string]manifest.Node{
 						"login": {Files: []string{"auth/login.go"}},
 					},
 				},
@@ -96,7 +96,7 @@ func TestListPaths(t *testing.T) {
 
 	paths := ListPaths(m)
 
-	// Should include: auth/ (intermediate with files), auth/login (leaf), payments (leaf)
+	// Should include: auth/ (boundary with files), auth/login (feature), payments (feature)
 	if len(paths) != 3 {
 		t.Errorf("Expected 3 paths, got %d: %v", len(paths), paths)
 	}
@@ -138,7 +138,7 @@ func TestListPathsEmpty(t *testing.T) {
 	m := &manifest.Manifest{
 		Tree: manifest.Tree{
 			Name:     "my-project",
-			Features: map[string]manifest.Feature{},
+			Children: map[string]manifest.Node{},
 		},
 	}
 

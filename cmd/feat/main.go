@@ -160,8 +160,8 @@ func runList() error {
 		return fmt.Errorf("loading manifest: %w", err)
 	}
 
-	if len(m.Tree.Features) == 0 {
-		fmt.Println("No features defined in manifest.")
+	if len(m.Tree.Children) == 0 {
+		fmt.Println("No children defined in manifest.")
 		fmt.Println("Create one with: feat split \"\" <feature-name>")
 		return nil
 	}
@@ -375,33 +375,33 @@ func resolveManifestPath(manifestPath string) (string, error) {
 }
 
 func printManifest(m *manifest.Manifest, indent int) {
-	for name, feature := range m.Tree.Features {
-		printFeature(name, feature, indent)
+	for name, node := range m.Tree.Children {
+		printNode(name, node, indent)
 	}
 }
 
-func printFeature(name string, f manifest.Feature, indent int) {
+func printNode(name string, n manifest.Node, indent int) {
 	prefix := strings.Repeat("  ", indent)
 
-	if f.IsLeaf() {
+	if n.IsFeature() {
 		fmt.Printf("%s%s (feature)\n", prefix, name)
-		for _, file := range f.Files {
+		for _, file := range n.Files {
 			fmt.Printf("%s  - %s\n", prefix, file)
 		}
-		if len(f.Tests) > 0 {
-			fmt.Printf("%s  [tests: %v]\n", prefix, f.Tests)
+		if len(n.Tests) > 0 {
+			fmt.Printf("%s  [tests: %v]\n", prefix, n.Tests)
 		}
 	} else {
-		fmt.Printf("%s%s/\n", prefix, name)
-		if len(f.Files) > 0 {
-			fmt.Printf("%s  [files: %v]\n", prefix, f.Files)
+		fmt.Printf("%s%s/ (boundary)\n", prefix, name)
+		if len(n.Files) > 0 {
+			fmt.Printf("%s  [files: %v]\n", prefix, n.Files)
 		}
-		if len(f.Tests) > 0 {
-			fmt.Printf("%s  [tests: %v]\n", prefix, f.Tests)
+		if len(n.Tests) > 0 {
+			fmt.Printf("%s  [tests: %v]\n", prefix, n.Tests)
 		}
 	}
 
-	for childName, child := range f.Children {
-		printFeature(childName, child, indent+1)
+	for childName, child := range n.Children {
+		printNode(childName, child, indent+1)
 	}
 }

@@ -11,13 +11,13 @@ import (
 func TestSplit(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Intermediate node: has children, no files
+	// Boundary node: has children, no files
 	m := &manifest.Manifest{
 		Tree: manifest.Tree{
 			Name: "test",
-			Features: map[string]manifest.Feature{
+			Children: map[string]manifest.Node{
 				"auth": {
-					Children: map[string]manifest.Feature{},
+					Children: map[string]manifest.Node{},
 				},
 			},
 		},
@@ -35,12 +35,12 @@ func TestSplit(t *testing.T) {
 		t.Fatalf("Split failed: %v", err)
 	}
 
-	if result.NewFeaturePath != "auth/logout" {
-		t.Errorf("NewFeaturePath = %q, want %q", result.NewFeaturePath, "auth/logout")
+	if result.NewPath != "auth/logout" {
+		t.Errorf("NewPath = %q, want %q", result.NewPath, "auth/logout")
 	}
 
-	// Verify feature was added
-	auth := m.Tree.Features["auth"]
+	// Verify node was added
+	auth := m.Tree.Children["auth"]
 	if _, ok := auth.Children["logout"]; !ok {
 		t.Error("Expected 'logout' to be added to auth children")
 	}
@@ -52,7 +52,7 @@ func TestSplitRootLevel(t *testing.T) {
 	m := &manifest.Manifest{
 		Tree: manifest.Tree{
 			Name:     "test",
-			Features: map[string]manifest.Feature{},
+			Children: map[string]manifest.Node{},
 		},
 	}
 
@@ -68,11 +68,11 @@ func TestSplitRootLevel(t *testing.T) {
 		t.Fatalf("Split failed: %v", err)
 	}
 
-	if result.NewFeaturePath != "payments" {
-		t.Errorf("NewFeaturePath = %q, want %q", result.NewFeaturePath, "payments")
+	if result.NewPath != "payments" {
+		t.Errorf("NewPath = %q, want %q", result.NewPath, "payments")
 	}
 
-	if _, ok := m.Tree.Features["payments"]; !ok {
+	if _, ok := m.Tree.Children["payments"]; !ok {
 		t.Error("Expected 'payments' to be added to root")
 	}
 }
@@ -83,9 +83,9 @@ func TestSplitDuplicate(t *testing.T) {
 	m := &manifest.Manifest{
 		Tree: manifest.Tree{
 			Name: "test",
-			Features: map[string]manifest.Feature{
+			Children: map[string]manifest.Node{
 				"auth": {
-					Children: map[string]manifest.Feature{
+					Children: map[string]manifest.Node{
 						"login": {Files: []string{"auth/login.go"}},
 					},
 				},
@@ -102,18 +102,18 @@ func TestSplitDuplicate(t *testing.T) {
 
 	_, err := Split(m, opts)
 	if err == nil {
-		t.Error("Expected error for duplicate feature")
+		t.Error("Expected error for duplicate node")
 	}
 }
 
-func TestSplitLeafParent(t *testing.T) {
+func TestSplitFeatureParent(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Leaf node: has files, no children
+	// Feature node: has files, no children
 	m := &manifest.Manifest{
 		Tree: manifest.Tree{
 			Name: "test",
-			Features: map[string]manifest.Feature{
+			Children: map[string]manifest.Node{
 				"auth": {
 					Files: []string{"auth.go"},
 				},
@@ -130,7 +130,7 @@ func TestSplitLeafParent(t *testing.T) {
 
 	_, err := Split(m, opts)
 	if err == nil {
-		t.Error("Expected error when splitting leaf feature")
+		t.Error("Expected error when splitting feature (leaf)")
 	}
 }
 
@@ -140,7 +140,7 @@ func TestSplitEmptyName(t *testing.T) {
 	m := &manifest.Manifest{
 		Tree: manifest.Tree{
 			Name:     "test",
-			Features: map[string]manifest.Feature{},
+			Children: map[string]manifest.Node{},
 		},
 	}
 
@@ -163,7 +163,7 @@ func TestSplitWithSlash(t *testing.T) {
 	m := &manifest.Manifest{
 		Tree: manifest.Tree{
 			Name:     "test",
-			Features: map[string]manifest.Feature{},
+			Children: map[string]manifest.Node{},
 		},
 	}
 
@@ -186,8 +186,8 @@ func TestSplitCreateFiles(t *testing.T) {
 	m := &manifest.Manifest{
 		Tree: manifest.Tree{
 			Name: "test",
-			Features: map[string]manifest.Feature{
-				"auth": {Children: map[string]manifest.Feature{}},
+			Children: map[string]manifest.Node{
+				"auth": {Children: map[string]manifest.Node{}},
 			},
 		},
 	}
