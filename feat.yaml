@@ -1,37 +1,25 @@
 config:
-  max_files: 10
+  max_files: 3
 tree:
-  name: feat
+  name: my-project
   files:
     - go.mod
     - go.sum
-    - justfile
   children:
-    cli:
+    api:
       files:
-        - cmd/feat/main.go
-    manifest:
+        - api/server.go
+        - api/routes.go
+      children:
+        handlers:
+          files:
+            - api/handlers/users.go
+            - api/handlers/auth.go
+    db:
       files:
-        - internal/manifest/manifest.go
-      tests:
-        - internal/manifest/manifest_test.go
-    loader:
-      files:
-        - internal/loader/loader.go
-      tests:
-        - internal/loader/loader_test.go
-    split:
-      files:
-        - internal/split/split.go
-      tests:
-        - internal/split/split_test.go
-    tree:
-      files:
-        - internal/tree/tree.go
-      tests:
-        - internal/tree/tree_test.go
-    state:
-      files:
-        - internal/state/state.go
-      tests:
-        - internal/state/state_test.go
+        - db/connection.go
+        - db/migrations.go
+      children:
+        models:
+          files:
+            - db/models/user.go
