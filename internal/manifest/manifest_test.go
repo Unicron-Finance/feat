@@ -67,6 +67,11 @@ tree:
 	if len(auth.Children) != 1 {
 		t.Errorf("Expected 1 child, got %d", len(auth.Children))
 	}
+
+	// Config should use default when not set
+	if m.Config.GetMaxFiles() != DefaultMaxFiles {
+		t.Errorf("Expected default max_files %d, got %d", DefaultMaxFiles, m.Config.GetMaxFiles())
+	}
 }
 
 func TestLoadNotFound(t *testing.T) {
@@ -124,6 +129,61 @@ func TestSave(t *testing.T) {
 	auth := m2.Tree.Children["auth"]
 	if len(auth.Tests) != 1 {
 		t.Errorf("Expected 1 test after reload, got %d", len(auth.Tests))
+	}
+}
+
+func TestLoadWithConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	manifestPath := filepath.Join(tmpDir, "feat.yaml")
+
+	content := `
+config:
+  max_files: 5
+tree:
+  name: my-project
+  children:
+    auth:
+      files:
+        - auth.go
+`
+	if err := os.WriteFile(manifestPath, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write test manifest: %v", err)
+	}
+
+	m, err := Load(manifestPath)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	if m.Config.MaxFiles != 5 {
+		t.Errorf("Expected max_files 5, got %d", m.Config.MaxFiles)
+	}
+
+	if m.Config.GetMaxFiles() != 5 {
+		t.Errorf("Expected GetMaxFiles() 5, got %d", m.Config.GetMaxFiles())
+	}
+}
+
+func TestConfigGetMaxFilesDefault(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   Config
+		expected int
+	}{
+		{"zero value", Config{}, DefaultMaxFiles},
+		{"explicitly zero", Config{MaxFiles: 0}, DefaultMaxFiles},
+		{"negative value", Config{MaxFiles: -1}, DefaultMaxFiles},
+		{"positive value", Config{MaxFiles: 5}, 5},
+		{"large value", Config{MaxFiles: 100}, 100},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.config.GetMaxFiles()
+			if got != tt.expected {
+				t.Errorf("GetMaxFiles() = %d, want %d", got, tt.expected)
+			}
+		})
 	}
 }
 
@@ -297,6 +357,39 @@ func TestValidate(t *testing.T) {
 				Tree: Tree{
 					Name:     "my-project",
 					Children: map[string]Node{"payments": {}},
+				},
+			},
+			issues: 0,
+		},
+		{
+			name: "negative max_files",
+			m: Manifest{
+				Config: Config{MaxFiles: -5},
+				Tree: Tree{
+					Name:     "my-project",
+					Children: map[string]Node{"auth": {Files: []string{"auth.go"}}},
+				},
+			},
+			issues: 1, // negative max_files
+		},
+		{
+			name: "zero max_files is valid (uses default)",
+			m: Manifest{
+				Config: Config{MaxFiles: 0},
+				Tree: Tree{
+					Name:     "my-project",
+					Children: map[string]Node{"auth": {Files: []string{"auth.go"}}},
+				},
+			},
+			issues: 0,
+		},
+		{
+			name: "positive max_files is valid",
+			m: Manifest{
+				Config: Config{MaxFiles: 10},
+				Tree: Tree{
+					Name:     "my-project",
+					Children: map[string]Node{"auth": {Files: []string{"auth.go"}}},
 				},
 			},
 			issues: 0,
