@@ -1,6 +1,7 @@
 package main
 
 import (
+	exitcodes "github.com/lola-the-lobster/feat/internal/errors"
 	"flag"
 	"fmt"
 	"os"
@@ -22,19 +23,19 @@ var (
 func main() {
 	if len(os.Args) < 2 {
 		printUsage()
-		os.Exit(1)
+		os.Exit(exitcodes.ExitGeneralError)
 	}
 
 	// Handle version flag
 	if os.Args[1] == "-v" || os.Args[1] == "--version" || os.Args[1] == "version" {
 		fmt.Printf("feat version %s (commit: %s)\n", version, commit)
-		os.Exit(0)
+		os.Exit(exitcodes.ExitSuccess)
 	}
 
 	// Handle help flag
 	if os.Args[1] == "-h" || os.Args[1] == "--help" || os.Args[1] == "help" {
 		printUsage()
-		os.Exit(0)
+		os.Exit(exitcodes.ExitSuccess)
 	}
 
 	command := os.Args[1]
@@ -43,42 +44,42 @@ func main() {
 	case "init":
 		if err := runInit(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			os.Exit(exitcodes.ExitGeneralError)
 		}
 	case "list":
 		if err := runList(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			os.Exit(exitcodes.ExitGeneralError)
 		}
 	case "parse":
 		if err := runParse(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			os.Exit(exitcodes.ExitGeneralError)
 		}
 	case "split":
 		if err := runSplit(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			os.Exit(exitcodes.ExitGeneralError)
 		}
 	case "status":
 		if err := runStatus(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			os.Exit(exitcodes.ExitGeneralError)
 		}
 	case "validate":
 		if err := runValidate(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			os.Exit(exitcodes.ExitGeneralError)
 		}
 	case "work":
 		if err := runWork(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			os.Exit(exitcodes.ExitGeneralError)
 		}
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", command)
 		fmt.Fprintln(os.Stderr, "Run 'feat help' for usage.")
-		os.Exit(1)
+		os.Exit(exitcodes.ExitGeneralError)
 	}
 }
 
