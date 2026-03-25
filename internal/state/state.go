@@ -75,3 +75,12 @@ func (m *Manager) GetCurrent() (string, error) {
 	}
 	return strings.TrimSpace(string(data)), nil
 }
+
+// Clear removes the current feature state.
+func (m *Manager) Clear() error {
+	currentPath := filepath.Join(m.stateDir, "current")
+	if err := os.Remove(currentPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("removing current file: %w", err)
+	}
+	return nil
+}

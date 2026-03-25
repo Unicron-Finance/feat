@@ -18,6 +18,11 @@ func TestManagerInit(t *testing.T) {
 	if _, err := os.Stat(stateDir); err != nil {
 		t.Errorf("State directory not created: %v", err)
 	}
+
+	featuresDir := filepath.Join(stateDir, "features")
+	if _, err := os.Stat(featuresDir); err != nil {
+		t.Errorf("Features directory not created: %v", err)
+	}
 }
 
 func TestSetAndGetCurrent(t *testing.T) {
@@ -25,30 +30,18 @@ func TestSetAndGetCurrent(t *testing.T) {
 	mgr := NewManager(tmpDir)
 
 	// Set current
-	if err := mgr.SetCurrent("auth/login", "/project/feat.yaml"); err != nil {
+	if err := mgr.SetCurrent("auth/login"); err != nil {
 		t.Fatalf("SetCurrent failed: %v", err)
 	}
 
 	// Get current
-	state, err := mgr.GetCurrent()
+	current, err := mgr.GetCurrent()
 	if err != nil {
 		t.Fatalf("GetCurrent failed: %v", err)
 	}
 
-	if state == nil {
-		t.Fatal("Expected state, got nil")
-	}
-
-	if state.FeaturePath != "auth/login" {
-		t.Errorf("FeaturePath = %q, want %q", state.FeaturePath, "auth/login")
-	}
-
-	if state.ManifestPath != "/project/feat.yaml" {
-		t.Errorf("ManifestPath = %q, want %q", state.ManifestPath, "/project/feat.yaml")
-	}
-
-	if state.Timestamp.IsZero() {
-		t.Error("Expected non-zero timestamp")
+	if current != "auth/login" {
+		t.Errorf("GetCurrent() = %q, want %q", current, "auth/login")
 	}
 }
 
@@ -56,13 +49,14 @@ func TestGetCurrentEmpty(t *testing.T) {
 	tmpDir := t.TempDir()
 	mgr := NewManager(tmpDir)
 
-	state, err := mgr.GetCurrent()
+	// Get current without setting
+	current, err := mgr.GetCurrent()
 	if err != nil {
 		t.Fatalf("GetCurrent failed: %v", err)
 	}
 
-	if state != nil {
-		t.Error("Expected nil state for empty directory")
+	if current != "" {
+		t.Errorf("GetCurrent() = %q, want empty string", current)
 	}
 }
 
@@ -71,7 +65,7 @@ func TestClear(t *testing.T) {
 	mgr := NewManager(tmpDir)
 
 	// Set then clear
-	if err := mgr.SetCurrent("auth/login", "/project/feat.yaml"); err != nil {
+	if err := mgr.SetCurrent("auth/login"); err != nil {
 		t.Fatalf("SetCurrent failed: %v", err)
 	}
 
@@ -79,13 +73,13 @@ func TestClear(t *testing.T) {
 		t.Fatalf("Clear failed: %v", err)
 	}
 
-	state, err := mgr.GetCurrent()
+	current, err := mgr.GetCurrent()
 	if err != nil {
 		t.Fatalf("GetCurrent failed: %v", err)
 	}
 
-	if state != nil {
-		t.Error("Expected nil state after clear")
+	if current != "" {
+		t.Error("Expected empty string after clear")
 	}
 }
 
@@ -106,48 +100,20 @@ func TestExists(t *testing.T) {
 	}
 }
 
-func TestFormatState(t *testing.T) {
+func TestSanitizeFeaturePath(t *testing.T) {
 	tests := []struct {
-		name     string
-		state    *State
-		contains []string
+		input    string
+		expected string
 	}{
-		{
-			name:     "nil state",
-			state:    nil,
-			contains: []string{"No active feature"},
-		},
-		{
-			name: "full state",
-			state: &State{
-				FeaturePath:  "auth/login",
-				ManifestPath: "/project/feat.yaml",
-			},
-			contains: []string{"auth/login", "/project/feat.yaml"},
-		},
+		{"auth/login", "auth-login"},
+		{"feature-name", "feature-name"},
+		{"deep/nested/path", "deep-nested-path"},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			output := FormatState(tt.state)
-			for _, s := range tt.contains {
-				if !contains(output, s) {
-					t.Errorf("FormatState() output missing %q: got %q", s, output)
-				}
-			}
-		})
-	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
+		result := SanitizeFeaturePath(tt.input)
+		if result != tt.expected {
+			t.Errorf("SanitizeFeaturePath(%q) = %q, want %q", tt.input, result, tt.expected)
 		}
 	}
-	return false
 }
