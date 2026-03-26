@@ -84,3 +84,11 @@ func (m *Manager) Clear() error {
 	}
 	return nil
 }
+
+// FormatState formats the current feature state for display.
+func FormatState(featurePath string) string {
+	if featurePath == "" {
+		return "No active feature\n"
+	}
+	return fmt.Sprintf("Current feature: %s\n", featurePath)
+}

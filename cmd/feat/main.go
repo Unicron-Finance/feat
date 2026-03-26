@@ -415,7 +415,7 @@ func runWork() error {
 
 	projectRoot := filepath.Dir(absPath)
 	mgr := state.NewManager(projectRoot)
-	if err := mgr.SetCurrent(featurePath, absPath); err != nil {
+	if err := mgr.SetCurrent(featurePath); err != nil {
 		return fmt.Errorf("saving state: %w", err)
 	}
 
