@@ -7,11 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"time"
+//	"time"
 
-	"github.com/lola-the-lobster/feat/internal/loader"
+//	"github.com/lola-the-lobster/feat/internal/loader"
 	"github.com/lola-the-lobster/feat/internal/manifest"
-	"github.com/lola-the-lobster/feat/internal/state"
+//	"github.com/lola-the-lobster/feat/internal/state"
 )
 
 // FeatureJSON represents a feature in JSON output.
@@ -102,26 +102,26 @@ func collectFeatures(children map[string]manifest.Node, prefix string) []Feature
 }
 
 // FormatStatusJSON returns a JSON representation of the current status.
-func FormatStatusJSON(s *state.State, result *loader.Result) ([]byte, error) {
-	output := StatusJSON{}
+//func FormatStatusJSON(s *state.State, result *loader.Result) ([]byte, error) {
+//	output := StatusJSON{}
 
-	if s != nil {
-		output.CurrentFeature = s.FeaturePath
-		output.ManifestPath = s.ManifestPath
-		if !s.Timestamp.IsZero() {
-			output.Timestamp = s.Timestamp.Format(time.RFC3339)
-		}
-	}
+//	if s != nil {
+//		output.CurrentFeature = s.FeaturePath
+//		output.ManifestPath = s.ManifestPath
+//		if !s.Timestamp.IsZero() {
+//			output.Timestamp = s.Timestamp.Format(time.RFC3339)
+//		}
+//	}
 
-	if result != nil {
-		output.Files = result.Files
-		output.Tests = result.Tests
-		output.Ancestors = result.AncestorFiles
-		output.MissingFiles = result.MissingFiles
-	}
+//	if result != nil {
+//		output.Files = result.Files
+//		output.Tests = result.Tests
+//		output.Ancestors = result.AncestorFiles
+//		output.MissingFiles = result.MissingFiles
+//	}
 
-	return json.MarshalIndent(output, "", "  ")
-}
+//	return json.MarshalIndent(output, "", "  ")
+//}
 
 // FormatErrorJSON returns a JSON error response.
 func FormatErrorJSON(err error, code int) []byte {

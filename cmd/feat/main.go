@@ -81,9 +81,9 @@ func main() {
 			printError(err, exitcodes.ExitGeneralError)
 		}
 	case "status":
-		if err := runStatus(); err != nil {
-			printError(err, exitcodes.ExitGeneralError)
-		}
+//		if err := runStatus(); err != nil {
+//			printError(err, exitcodes.ExitGeneralError)
+//		}
 	case "transition":
 		if err := runTransition(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -303,79 +303,79 @@ func runSplit() error {
 	return nil
 }
 
-func runStatus() error {
-	fs := flag.NewFlagSet("status", flag.ContinueOnError)
-	var manifestPath string
-	fs.StringVar(&manifestPath, "f", "feat.yaml", "Path to manifest file")
-	if err := fs.Parse(os.Args[2:]); err != nil {
-		return err
-	}
+//func runStatus() error {
+//	fs := flag.NewFlagSet("status", flag.ContinueOnError)
+//	var manifestPath string
+//	fs.StringVar(&manifestPath, "f", "feat.yaml", "Path to manifest file")
+//	if err := fs.Parse(os.Args[2:]); err != nil {
+//		return err
+//	}
 
-	absPath, err := resolveManifestPath(manifestPath)
-	if err != nil {
-		return err
-	}
+//	absPath, err := resolveManifestPath(manifestPath)
+//	if err != nil {
+//		return err
+//	}
 
-	projectRoot := filepath.Dir(absPath)
-	mgr := state.NewManager(projectRoot)
+//	projectRoot := filepath.Dir(absPath)
+//	mgr := state.NewManager(projectRoot)
 
-	// Load manifest to get workflow for step display
-	m, err := manifest.Load(absPath)
-	if err != nil {
-		return fmt.Errorf("loading manifest: %w", err)
-	}
+//	// Load manifest to get workflow for step display
+//	m, err := manifest.Load(absPath)
+//	if err != nil {
+//		return fmt.Errorf("loading manifest: %w", err)
+//	}
+//
+//	mgr.SetWorkflow(m.Config.GetWorkflow())
 
-	mgr.SetWorkflow(m.Config.GetWorkflow())
+//	currentFeature, err := mgr.GetCurrent()
+//	if err != nil {
+//		return fmt.Errorf("reading state: %w", err)
+//	}
+//
+//	// Load the feature if there's a current one
+//	var result *loader.Result
+//	if s != nil && s.FeaturePath != "" {
+//		m, err := manifest.Load(absPath)
+//		if err != nil {
+//			return fmt.Errorf("loading manifest: %w", err)
+//		}
 
-	currentFeature, err := mgr.GetCurrent()
-	if err != nil {
-		return fmt.Errorf("reading state: %w", err)
-	}
-
-	// Load the feature if there's a current one
-	var result *loader.Result
-	if s != nil && s.FeaturePath != "" {
-		m, err := manifest.Load(absPath)
-		if err != nil {
-			return fmt.Errorf("loading manifest: %w", err)
-		}
-
-		l := loader.New(m, absPath)
-		result, err = l.Load(s.FeaturePath)
-		if err != nil {
+//		l := loader.New(m, absPath)
+//		result, err = l.Load(s.FeaturePath)
+//		if err != nil {
 			// Don't fail if feature not found, just don't include files
-			result = nil
-		}
-	}
+//			result = nil
+//		}
+//	}
 
-	if jsonOutput {
-		data, err := formatter.FormatStatusJSON(s, result)
-		if err != nil {
-			return fmt.Errorf("formatting JSON: %w", err)
-		}
-		fmt.Println(string(data))
-	} else {
-		fmt.Print(state.FormatState(s))
-		if result != nil {
-			fmt.Println()
-			fmt.Print(loader.FormatResult(result))
-		}
-	}
+//	if jsonOutput {
+//		data, err := formatter.FormatStatusJSON(s, result)
+//		if err != nil {
+//			return fmt.Errorf("formatting JSON: %w", err)
+//		}
+//		fmt.Println(string(data))
+//	} else {
+//		fmt.Print(state.FormatState(s))
+//		if result != nil {
+//			fmt.Println()
+//			fmt.Print(loader.FormatResult(result))
+//		}
+//	}
 
-	if currentFeature == "" {
-		fmt.Print(state.FormatState(""))
-		return nil
-	}
+//	if currentFeature == "" {
+//		fmt.Print(state.FormatState(""))
+//		return nil
+//	}
 
-	currentStep, err := mgr.GetFeatureStep(currentFeature)
-	if err != nil {
-		return fmt.Errorf("reading feature step: %w", err)
-	}
+//	currentStep, err := mgr.GetFeatureStep(currentFeature)
+//	if err != nil {
+//		return fmt.Errorf("reading feature step: %w", err)
+//	}
 
-	fmt.Print(state.FormatFeatureStatus(currentFeature, currentStep))
+//	fmt.Print(state.FormatFeatureStatus(currentFeature, currentStep))
 
-	return nil
-}
+//	return nil
+//}
 
 func runTransition() error {
 	fs := flag.NewFlagSet("transition", flag.ContinueOnError)
