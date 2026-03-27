@@ -1,7 +1,6 @@
 package main
 
 import (
-	exitcodes "github.com/lola-the-lobster/feat/internal/errors"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -9,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	exitcodes "github.com/lola-the-lobster/feat/internal/errors"
 	"github.com/lola-the-lobster/feat/internal/formatter"
 	"github.com/lola-the-lobster/feat/internal/loader"
 	"github.com/lola-the-lobster/feat/internal/manifest"
@@ -84,6 +84,11 @@ func main() {
 		if err := runStatus(); err != nil {
 			printError(err, exitcodes.ExitGeneralError)
 		}
+	case "transition":
+		if err := runTransition(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(exitcodes.ExitGeneralError)
+		}
 	case "validate":
 		if err := runValidate(); err != nil {
 			printError(err, exitcodes.ExitGeneralError)
@@ -124,6 +129,7 @@ func printUsage() {
 	fmt.Println("  parse             Parse feat.yaml and dump structure")
 	fmt.Println("  split <parent> <name>  Create a new feature")
 	fmt.Println("  status            Show current feature context")
+	fmt.Println("  transition        Update feature workflow state")
 	fmt.Println("  validate          Check manifest for issues")
 	fmt.Println("  work <feature>    Load a feature's context")
 	fmt.Println("  version           Show version information")
@@ -140,6 +146,7 @@ func printUsage() {
 	fmt.Println("  feat work auth/login         # Work on auth/login feature")
 	fmt.Println("  feat split auth login-v2     # Create auth/login-v2 feature")
 	fmt.Println("  feat status                  # Show current feature")
+	fmt.Println("  feat transition build        # Mark feature as 'build' state")
 	fmt.Println("  feat validate                # Check for issues")
 }
 
@@ -201,6 +208,14 @@ func runList() error {
 	m, err := manifest.Load(absPath)
 	if err != nil {
 		return fmt.Errorf("loading manifest: %w", err)
+	}
+
+	// Show current feature if set
+	projectRoot := filepath.Dir(absPath)
+	mgr := state.NewManager(projectRoot)
+	current, _ := mgr.GetCurrent()
+	if current != "" {
+		fmt.Printf("Current feature: %s\n\n", current)
 	}
 
 	if len(m.Tree.Children) == 0 {
@@ -304,21 +319,34 @@ func runStatus() error {
 	projectRoot := filepath.Dir(absPath)
 	mgr := state.NewManager(projectRoot)
 
-	s, err := mgr.GetCurrent()
+	// Load manifest to get workflow for step display
+	m, err := manifest.Load(absPath)
+	if err != nil {
+		return fmt.Errorf("loading manifest: %w", err)
+	}
+
+	mgr.SetWorkflow(m.Config.GetWorkflow())
+
+	currentFeature, err := mgr.GetCurrent()
 	if err != nil {
 		return fmt.Errorf("reading state: %w", err)
 	}
 
-	// Load the feature if there's a current one
-	var result *loader.Result
-	if s != nil && s.FeaturePath != "" {
-		m, err := manifest.Load(absPath)
-		if err != nil {
-			return fmt.Errorf("loading manifest: %w", err)
-		}
+	if currentFeature == "" {
+		fmt.Print(state.FormatState(""))
+		return nil
+	}
 
+	currentStep, err := mgr.GetFeatureStep(currentFeature)
+	if err != nil {
+		return fmt.Errorf("reading feature step: %w", err)
+	}
+
+	// Load the feature files if there's a current feature
+	var result *loader.Result
+	if currentFeature != "" {
 		l := loader.New(m, absPath)
-		result, err = l.Load(s.FeaturePath)
+		result, err = l.Load(currentFeature)
 		if err != nil {
 			// Don't fail if feature not found, just don't include files
 			result = nil
@@ -326,18 +354,100 @@ func runStatus() error {
 	}
 
 	if jsonOutput {
-		data, err := formatter.FormatStatusJSON(s, result)
+		data, err := formatter.FormatStatusJSON(currentFeature, currentStep, result)
 		if err != nil {
 			return fmt.Errorf("formatting JSON: %w", err)
 		}
 		fmt.Println(string(data))
 	} else {
-		fmt.Print(state.FormatState(s))
+		fmt.Print(state.FormatFeatureStatus(currentFeature, currentStep))
 		if result != nil {
 			fmt.Println()
 			fmt.Print(loader.FormatResult(result))
 		}
 	}
+
+	return nil
+}
+
+func runTransition() error {
+	fs := flag.NewFlagSet("transition", flag.ContinueOnError)
+	var manifestPath string
+	fs.StringVar(&manifestPath, "f", "feat.yaml", "Path to manifest file")
+	if err := fs.Parse(os.Args[2:]); err != nil {
+		return err
+	}
+
+	if len(fs.Args()) < 1 {
+		return fmt.Errorf("usage: feat transition <step>\n\nExamples:\n  feat transition tests\n  feat transition implement")
+	}
+
+	newStep := fs.Args()[0]
+
+	absPath, err := resolveManifestPath(manifestPath)
+	if err != nil {
+		return err
+	}
+
+	// Load manifest for workflow validation
+	m, err := manifest.Load(absPath)
+	if err != nil {
+		return fmt.Errorf("loading manifest: %w", err)
+	}
+
+	workflow := m.Config.GetWorkflow()
+
+	// Build valid steps map
+	validSteps := make(map[string]bool)
+	for _, step := range workflow {
+		validSteps[step] = true
+	}
+
+	if !validSteps[newStep] {
+		return fmt.Errorf("invalid step: %s\nValid steps: %v", newStep, workflow)
+	}
+
+	projectRoot := filepath.Dir(absPath)
+	mgr := state.NewManager(projectRoot)
+	mgr.SetWorkflow(workflow)
+
+	// Get current feature
+	currentFeature, err := mgr.GetCurrent()
+	if err != nil {
+		return fmt.Errorf("reading current feature: %w", err)
+	}
+
+	if currentFeature == "" {
+		return fmt.Errorf("no active feature. Run 'feat work <feature>' first")
+	}
+
+	// Get current step
+	currentStep, err := mgr.GetFeatureStep(currentFeature)
+	if err != nil {
+		return fmt.Errorf("reading feature step: %w", err)
+	}
+
+	// Simple validation - cannot go backwards in workflow
+	currentIdx := -1
+	newIdx := -1
+	for i, s := range workflow {
+		if s == currentStep {
+			currentIdx = i
+		}
+		if s == newStep {
+			newIdx = i
+		}
+	}
+
+	if newIdx < currentIdx {
+		return fmt.Errorf("cannot transition from %s back to %s", currentStep, newStep)
+	}
+
+	if err := mgr.SetFeatureStep(currentFeature, newStep); err != nil {
+		return fmt.Errorf("saving step: %w", err)
+	}
+
+	fmt.Printf("Feature '%s' transitioned: %s → %s\n", currentFeature, currentStep, newStep)
 
 	return nil
 }
@@ -415,7 +525,7 @@ func runWork() error {
 
 	projectRoot := filepath.Dir(absPath)
 	mgr := state.NewManager(projectRoot)
-	if err := mgr.SetCurrent(featurePath, absPath); err != nil {
+	if err := mgr.SetCurrent(featurePath); err != nil {
 		return fmt.Errorf("saving state: %w", err)
 	}
 

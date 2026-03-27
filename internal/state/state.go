@@ -1,4 +1,5 @@
-// Package state handles reading and writing the .feat/ directory state.
+// Package state manages per-feature workflow state in .feat/ directory.
+// Each feature gets its own directory with state tracking files.
 package state
 
 import (
@@ -6,36 +7,15 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
-const (
-	// StateDirName is the name of the state directory.
-	StateDirName = ".feat"
-
-	// CurrentFile is the file that stores the current feature path.
-	CurrentFile = "CURRENT"
-
-	// ManifestFile stores the path to the manifest being used.
-	ManifestFile = "MANIFEST"
-)
-
-// State represents the current feature context.
-type State struct {
-	// FeaturePath is the current feature being worked on.
-	FeaturePath string
-
-	// ManifestPath is the path to the manifest file.
-	ManifestPath string
-
-	// Timestamp is when the state was last updated.
-	Timestamp time.Time
-}
+const StateDirName = ".feat"
 
 // Manager handles state operations for a project.
 type Manager struct {
 	projectRoot string
 	stateDir    string
+	workflow    []string // Workflow steps from manifest
 }
 
 // NewManager creates a state manager for the given project root.
@@ -43,75 +23,32 @@ func NewManager(projectRoot string) *Manager {
 	return &Manager{
 		projectRoot: projectRoot,
 		stateDir:    filepath.Join(projectRoot, StateDirName),
+		workflow:    nil,
 	}
 }
 
-// Init creates the .feat/ directory if it doesn't exist.
+// SetWorkflow sets the workflow steps for the manager.
+// Used to provide default step when no step is set.
+func (m *Manager) SetWorkflow(workflow []string) {
+	m.workflow = workflow
+}
+
+// getDefaultStep returns the first step in the workflow, or empty string if no workflow set.
+func (m *Manager) getDefaultStep() string {
+	if len(m.workflow) > 0 {
+		return m.workflow[0]
+	}
+	return ""
+}
+
+// Init creates the .feat/ directory structure if it doesn't exist.
 func (m *Manager) Init() error {
 	if err := os.MkdirAll(m.stateDir, 0755); err != nil {
 		return fmt.Errorf("creating state directory: %w", err)
 	}
-	return nil
-}
-
-// SetCurrent sets the current feature context.
-func (m *Manager) SetCurrent(featurePath, manifestPath string) error {
-	if err := m.Init(); err != nil {
-		return err
-	}
-
-	// Write CURRENT file
-	currentPath := filepath.Join(m.stateDir, CurrentFile)
-	content := fmt.Sprintf("%s\n%s\n%s\n",
-		featurePath,
-		manifestPath,
-		time.Now().Format(time.RFC3339),
-	)
-	if err := os.WriteFile(currentPath, []byte(content), 0644); err != nil {
-		return fmt.Errorf("writing current file: %w", err)
-	}
-
-	return nil
-}
-
-// GetCurrent reads the current feature context.
-// Returns nil state if no current feature is set.
-func (m *Manager) GetCurrent() (*State, error) {
-	currentPath := filepath.Join(m.stateDir, CurrentFile)
-
-	data, err := os.ReadFile(currentPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("reading current file: %w", err)
-	}
-
-	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
-	if len(lines) < 1 {
-		return nil, fmt.Errorf("invalid state file format")
-	}
-
-	state := &State{
-		FeaturePath: lines[0],
-	}
-
-	if len(lines) >= 2 {
-		state.ManifestPath = lines[1]
-	}
-
-	if len(lines) >= 3 {
-		state.Timestamp, _ = time.Parse(time.RFC3339, lines[2])
-	}
-
-	return state, nil
-}
-
-// Clear removes the current feature state.
-func (m *Manager) Clear() error {
-	currentPath := filepath.Join(m.stateDir, CurrentFile)
-	if err := os.Remove(currentPath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("removing current file: %w", err)
+	featuresDir := filepath.Join(m.stateDir, "features")
+	if err := os.MkdirAll(featuresDir, 0755); err != nil {
+		return fmt.Errorf("creating features directory: %w", err)
 	}
 	return nil
 }
@@ -122,22 +59,105 @@ func (m *Manager) Exists() bool {
 	return !os.IsNotExist(err)
 }
 
-// FormatState returns a human-readable representation of the state.
-func FormatState(s *State) string {
-	if s == nil {
-		return "No active feature.\nRun 'feat work <feature-path>' to start working on a feature.\n"
+// SanitizeFeaturePath converts "auth/login" to "auth-login" for filesystem use.
+func SanitizeFeaturePath(featurePath string) string {
+	return strings.ReplaceAll(featurePath, "/", "-")
+}
+
+// GetFeatureDir returns the path to a feature's state directory.
+func (m *Manager) GetFeatureDir(featurePath string) string {
+	sanitized := SanitizeFeaturePath(featurePath)
+	return filepath.Join(m.stateDir, "features", sanitized)
+}
+
+// SetCurrent marks a feature as the active one.
+func (m *Manager) SetCurrent(featurePath string) error {
+	if err := m.Init(); err != nil {
+		return err
+	}
+	currentPath := filepath.Join(m.stateDir, "current")
+	return os.WriteFile(currentPath, []byte(featurePath+"\n"), 0644)
+}
+
+// GetCurrent returns the active feature path, or empty string if none.
+func (m *Manager) GetCurrent() (string, error) {
+	currentPath := filepath.Join(m.stateDir, "current")
+	data, err := os.ReadFile(currentPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("reading current feature: %w", err)
+	}
+	return strings.TrimSpace(string(data)), nil
+}
+
+// Clear removes the current feature state.
+func (m *Manager) Clear() error {
+	currentPath := filepath.Join(m.stateDir, "current")
+	if err := os.Remove(currentPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("removing current file: %w", err)
+	}
+	return nil
+}
+
+// GetFeatureStep returns the current workflow step for a feature.
+// Returns the first step in the workflow if no step is set (default).
+func (m *Manager) GetFeatureStep(featurePath string) (string, error) {
+	if err := m.Init(); err != nil {
+		return "", err
 	}
 
-	var output string
-	output += fmt.Sprintf("Current feature: %s\n", s.FeaturePath)
+	featureDir := m.GetFeatureDir(featurePath)
+	stepPath := filepath.Join(featureDir, "step")
 
-	if s.ManifestPath != "" {
-		output += fmt.Sprintf("Manifest: %s\n", s.ManifestPath)
+	data, err := os.ReadFile(stepPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Default step for new features
+			return m.getDefaultStep(), nil
+		}
+		return "", fmt.Errorf("reading feature step: %w", err)
 	}
 
-	if !s.Timestamp.IsZero() {
-		output += fmt.Sprintf("Since: %s\n", s.Timestamp.Format("2006-01-02 15:04:05"))
+	step := strings.TrimSpace(string(data))
+	if step == "" {
+		return m.getDefaultStep(), nil
+	}
+	return step, nil
+}
+
+// SetFeatureStep updates the workflow step for a feature.
+func (m *Manager) SetFeatureStep(featurePath string, step string) error {
+	if err := m.Init(); err != nil {
+		return err
 	}
 
-	return output
+	featureDir := m.GetFeatureDir(featurePath)
+	if err := os.MkdirAll(featureDir, 0755); err != nil {
+		return fmt.Errorf("creating feature directory: %w", err)
+	}
+
+	stepPath := filepath.Join(featureDir, "step")
+	if err := os.WriteFile(stepPath, []byte(step+"\n"), 0644); err != nil {
+		return fmt.Errorf("writing feature step: %w", err)
+	}
+
+	return nil
+}
+
+// FormatState formats the current feature state for display.
+func FormatState(featurePath string) string {
+	if featurePath == "" {
+		return "No active feature\n"
+	}
+	return fmt.Sprintf("Current feature: %s\n", featurePath)
+}
+
+// FormatFeatureStatus returns a formatted status string for a feature including its step.
+func FormatFeatureStatus(featurePath string, step string) string {
+	if featurePath == "" {
+		return "No active feature\n"
+	}
+	return fmt.Sprintf("Feature: %s\nStep: %s\n", featurePath, step)
 }

@@ -11,7 +11,6 @@ import (
 
 	"github.com/lola-the-lobster/feat/internal/loader"
 	"github.com/lola-the-lobster/feat/internal/manifest"
-	"github.com/lola-the-lobster/feat/internal/state"
 )
 
 // FeatureJSON represents a feature in JSON output.
@@ -31,7 +30,7 @@ type ListJSON struct {
 // StatusJSON represents the JSON output for the status command.
 type StatusJSON struct {
 	CurrentFeature string   `json:"current_feature,omitempty"`
-	ManifestPath   string   `json:"manifest_path,omitempty"`
+	CurrentStep    string   `json:"current_step,omitempty"`
 	Files          []string `json:"files,omitempty"`
 	Tests          []string `json:"tests,omitempty"`
 	Ancestors      []string `json:"ancestors,omitempty"`
@@ -102,15 +101,11 @@ func collectFeatures(children map[string]manifest.Node, prefix string) []Feature
 }
 
 // FormatStatusJSON returns a JSON representation of the current status.
-func FormatStatusJSON(s *state.State, result *loader.Result) ([]byte, error) {
-	output := StatusJSON{}
-
-	if s != nil {
-		output.CurrentFeature = s.FeaturePath
-		output.ManifestPath = s.ManifestPath
-		if !s.Timestamp.IsZero() {
-			output.Timestamp = s.Timestamp.Format(time.RFC3339)
-		}
+func FormatStatusJSON(currentFeature string, currentStep string, result *loader.Result) ([]byte, error) {
+	output := StatusJSON{
+		CurrentFeature: currentFeature,
+		CurrentStep:    currentStep,
+		Timestamp:      time.Now().Format(time.RFC3339),
 	}
 
 	if result != nil {
