@@ -12,6 +12,7 @@ import (
 	"github.com/lola-the-lobster/feat/internal/formatter"
 	"github.com/lola-the-lobster/feat/internal/loader"
 	"github.com/lola-the-lobster/feat/internal/manifest"
+	"github.com/lola-the-lobster/feat/internal/add"
 	"github.com/lola-the-lobster/feat/internal/split"
 	"github.com/lola-the-lobster/feat/internal/state"
 	"github.com/lola-the-lobster/feat/internal/tree"
@@ -76,6 +77,10 @@ func main() {
 		if err := runParse(); err != nil {
 			printError(err, exitcodes.ExitGeneralError)
 		}
+	case "add":
+		if err := runAdd(); err != nil {
+			printError(err, exitcodes.ExitGeneralError)
+		}
 	case "split":
 		if err := runSplit(); err != nil {
 			printError(err, exitcodes.ExitGeneralError)
@@ -128,6 +133,7 @@ func printUsage() {
 	fmt.Println("  list              Show feature tree")
 	fmt.Println("  parse             Parse feat.yaml and dump structure")
 	fmt.Println("  split <parent> <name>  Create a new feature")
+	fmt.Println("  add <feature> <file>   Add a file to an existing feature")
 	fmt.Println("  status            Show current feature context")
 	fmt.Println("  transition        Update feature workflow state")
 	fmt.Println("  validate          Check manifest for issues")
@@ -145,9 +151,69 @@ func printUsage() {
 	fmt.Println("  feat list --json             # Show features as JSON")
 	fmt.Println("  feat work auth/login         # Work on auth/login feature")
 	fmt.Println("  feat split auth login-v2     # Create auth/login-v2 feature")
+	fmt.Println("  feat add manifest validate.go # Add file to manifest feature")
 	fmt.Println("  feat status                  # Show current feature")
 	fmt.Println("  feat transition build        # Mark feature as 'build' state")
 	fmt.Println("  feat validate                # Check for issues")
+}
+
+
+func runAdd() error {
+	if len(os.Args) < 4 {
+		return fmt.Errorf("usage: feat add <feature-path> <file-path>\n\nExamples:\n  feat add manifest internal/manifest/validate.go\n  feat add cli cmd/feat/config.go")
+	}
+
+	featurePath := os.Args[2]
+	filePath := os.Args[3]
+
+	fs := flag.NewFlagSet("add", flag.ContinueOnError)
+	var manifestPath string
+	var forceTest bool
+	fs.StringVar(&manifestPath, "f", "feat.yaml", "Path to manifest file")
+	fs.BoolVar(&forceTest, "test", false, "Force treating file as a test file")
+	if err := fs.Parse(os.Args[4:]); err != nil {
+		return err
+	}
+
+	absPath, err := resolveManifestPath(manifestPath)
+	if err != nil {
+		return err
+	}
+
+	m, err := manifest.Load(absPath)
+	if err != nil {
+		return fmt.Errorf("loading manifest: %w", err)
+	}
+
+	result, err := add.Add(m, add.Options{
+		FeaturePath: featurePath,
+		FilePath:    filePath,
+		ManifestDir: filepath.Dir(absPath),
+		ForceTest:   forceTest,
+	})
+	if err != nil {
+		return err
+	}
+
+	if err := m.Save(absPath); err != nil {
+		return fmt.Errorf("saving manifest: %w", err)
+	}
+
+	if jsonOutput {
+		output := map[string]interface{}{
+			"feature":   result.FeaturePath,
+			"file":      result.FilePath,
+			"isTest":    result.IsTest,
+			"addedTo":   result.AddedTo,
+			"manifest":  absPath,
+		}
+		data, _ := json.MarshalIndent(output, "", "  ")
+		fmt.Println(string(data))
+	} else {
+		fmt.Print(add.FormatResult(result))
+	}
+
+	return nil
 }
 
 func runInit() error {

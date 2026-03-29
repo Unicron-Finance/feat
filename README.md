@@ -429,6 +429,7 @@ config:
 - `feat list` — Show feature tree
 - `feat work <feature>` — Load a feature's context
 - `feat split <parent> <name>` — Create a new feature
+- `feat add <feature> <file>` — Add a file to an existing feature
 - `feat status` — Show current feature context
 - `feat transition <step>` — Update feature workflow state
 - `feat validate` — Check manifest for issues
@@ -444,6 +445,9 @@ feat split "" auth
 feat split auth login
 
 # Work on a feature
+
+# Add files to a feature
+feat add auth/login auth/login_test.go
 feat work auth/login
 
 # Check status
