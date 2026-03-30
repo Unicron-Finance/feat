@@ -23,6 +23,9 @@ type Manifest struct {
 	Tree Tree `yaml:"tree"`
 }
 
+// DefaultTestPattern is the default pattern for detecting test files.
+const DefaultTestPattern = "_test.go"
+
 // Config holds project-wide configuration settings.
 type Config struct {
 	// MaxFiles is the maximum number of files (feature + ancestors) to load.
@@ -32,6 +35,10 @@ type Config struct {
 	// Workflow is the list of workflow steps for features.
 	// Default is ["scaffold", "fix", "build", "test", "done"].
 	Workflow []string `yaml:"workflow,omitempty"`
+
+	// TestPattern is the suffix pattern for detecting test files.
+	// Default is "_test.go" for Go projects.
+	TestPattern string `yaml:"test_pattern,omitempty"`
 }
 
 // GetMaxFiles returns the max_files value, or the default if not set.
@@ -48,6 +55,14 @@ func (c Config) GetWorkflow() []string {
 		return DefaultWorkflow
 	}
 	return c.Workflow
+}
+
+// GetTestPattern returns the test file pattern, or the default if not set.
+func (c Config) GetTestPattern() string {
+	if c.TestPattern == "" {
+		return DefaultTestPattern
+	}
+	return c.TestPattern
 }
 
 // Tree represents the root node of the feature hierarchy.
